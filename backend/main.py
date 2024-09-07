@@ -51,15 +51,40 @@ def transcribe_audio():
         return jsonify(response.json())
     else:
         return jsonify({'error': 'Transcription failed', 'details': response.text}), 500
-    
+
     
 @app.route('/combine_words', methods=['POST'])
 def combine_words():
     word1 = request.form.get('word1')
     word2 = request.form.get('word2')
 
-    if not word1 or not word2:
-        return jsonify({'error': 'Please provide two words'}), 400
+    if word1 and word2:
+        # Combine two words
+        prompt = f"""
+        Combine the words "{word1}" and "{word2}" to create a new, unique word that is related to both input words. 
+        The new word should be creative and meaningful. 
+        Provide only the new word as the response, without any additional explanation.
+        The word should be meaningful, which can be found in a dictionary.
+        Example:
+        Input: wood, fire
+        Output: campfire
+        
+        Now, combine these words: {word1}, {word2}
+        """
+    elif word1:
+        # Generate a single word from description
+        prompt = f"""
+        Generate a single, real-world existing object that fits the description: "{word1}". 
+        The object should be meaningful and recognizable in the real world. 
+        Provide only the name of the object as the response.
+        Example:
+        Input: something that keeps you warm
+        Output: blanket
+        
+        Now, for the description: {word1}
+        """
+    else:
+        return jsonify({'error': 'Please provide either two words or a description'}), 400
 
     url = "https://api.groq.com/openai/v1/chat/completions"
     
@@ -67,17 +92,6 @@ def combine_words():
         "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json"
     }
-    prompt = f"""
-    Combine the words "{word1}" and "{word2}" to create a new, unique word that is related to both input words. 
-    The new word should be creative and meaningful. 
-    Provide only the new word as the response, without any additional explanation.
-    The word should be meaningful, which can be found in a dictionary.
-    Example:
-    Input: wood, fire
-    Output: campfire
-    
-    Now, combine these words: {word1}, {word2}
-    """
 
     data = {
         "model": "llama3-8b-8192",
@@ -96,4 +110,3 @@ def combine_words():
 
 if __name__ == '__main__':
     app.run(debug=True)
-
