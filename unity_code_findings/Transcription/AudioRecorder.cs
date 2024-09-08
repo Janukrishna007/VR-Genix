@@ -1,8 +1,9 @@
+// Filename: AudioRecorder.cs
 using System;
 using System.IO;
 using System.Threading.Tasks;
 using NAudio.Wave;
-using NAudio.Lame;  // Add this namespace for MP3 encoding
+using NAudio.Lame;
 
 namespace AudioApiProject
 {
@@ -20,7 +21,7 @@ namespace AudioApiProject
 
             // Path to the audio files folder at the project's root directory
             audioFolderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "audiofiles");
-            
+
             // Ensure the audio files folder is created
             if (!Directory.Exists(audioFolderPath))
             {
@@ -94,7 +95,21 @@ namespace AudioApiProject
                 }
 
                 // Send the recorded MP3 to the server
-                await SendRecordedAudio();
+                var transcription = await SendRecordedAudio();
+
+                // Send the transcription to combine words API
+                if (!string.IsNullOrEmpty(transcription))
+                {
+                    var words = transcription.Split(' '); // Assuming transcription has multiple words
+                    if (words.Length >= 2)
+                    {
+                        await apiClient.SendWordsToCombineApi(words[0], words[1]);
+                    }
+                    else
+                    {
+                        Console.WriteLine("Transcription did not return enough words.");
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -102,30 +117,25 @@ namespace AudioApiProject
             }
         }
 
-        private async Task SendRecordedAudio()
+        private async Task<string> SendRecordedAudio()
         {
             try
             {
                 if (!File.Exists(tempMp3FilePath))
                 {
                     Console.WriteLine("No MP3 file found to send.");
-                    return;
+                    return null;
                 }
 
                 using (var fs = new FileStream(tempMp3FilePath, FileMode.Open, FileAccess.Read))
                 {
-                    await apiClient.SendAudioToApi(fs, Path.GetFileName(tempMp3FilePath));
+                    return await apiClient.SendAudioToApi(fs, Path.GetFileName(tempMp3FilePath));
                 }
-
-                Console.WriteLine($"MP3 file {tempMp3FilePath} sent successfully.");
-
-                // Delete the MP3 file after sending
-                File.Delete(tempMp3FilePath);
-                Console.WriteLine($"MP3 file {tempMp3FilePath} deleted.");
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error sending audio: {ex.Message}");
+                return null;
             }
         }
 

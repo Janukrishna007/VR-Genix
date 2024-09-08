@@ -2,111 +2,97 @@ from flask import Flask, request, jsonify
 import requests
 import os
 from flask_cors import CORS
+from pydub import AudioSegment  # Library for handling audio format conversion
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
-GROQ_API_KEY = "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"
+GROQ_API_KEY = "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"
 
+# Ensure the 'temp' directory exists for saving files
+if not os.path.exists('temp'):
+    os.makedirs('temp')
 
 @app.route('/transcribe', methods=['POST'])
-def transcribe_audio():
-    if 'audio' not in request.files:
-        return jsonify({'error': 'No audio file provided'}), 400
-
-    audio_file = request.files['audio']
-    
-    # Save the audio file temporarily
-    temp_audio_path = 'audio.wav'
-    audio_file.save(temp_audio_path)
-
-    url = "https://api.groq.com/openai/v1/audio/translations"
-    
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}"
-    }
-    
-    data = {
-        "model": "whisper-large-v3",
-        "prompt": "Specify context or spelling",
-        "temperature": 0,
-        "response_format": "json"
-    }
+def transcribe():
     try:
-        with open(temp_audio_path, "rb") as file:
-            files = {"file": file}
-            response = requests.post(url, headers=headers, data=data, files=files)
-    finally:
-        # Close the file before attempting to remove it
-        if 'file' in locals():
-            file.close()
+        # Ensure the file is part of the request
+        if 'audio' not in request.files:
+            return jsonify({'error': 'No audio file provided'}), 400
 
-        # Try to remove the file
-        try:
-            os.remove(temp_audio_path)
-        except PermissionError:
-            print(f"Warning: Unable to delete {temp_audio_path}. It may still be in use.")
+        audio_file = request.files['audio']
 
-    if response.status_code == 200:
-        return jsonify(response.json())
-    else:
-        return jsonify({'error': 'Transcription failed', 'details': response.text}), 500
-
-    
-@app.route('/combine_words', methods=['POST'])
-def combine_words():
-    word1 = request.form.get('word1')
-    word2 = request.form.get('word2')
-
-    if word1 and word2:
-        # Combine two words
-        prompt = f"""
-        Combine the words "{word1}" and "{word2}" to create a new, unique word that is related to both input words. 
-        The new word should be creative and meaningful. 
-        Provide only the new word as the response, without any additional explanation.
-        The word should be meaningful, which can be found in a dictionary.
-        Example:
-        Input: wood, fire
-        Output: campfire
+        # Validate that the file is an audio file
+        if not audio_file.filename.endswith(('.wav', '.mp3', '.ogg')):
+            return jsonify({'error': 'Unsupported audio format. Please upload a .wav, .mp3, or .ogg file.'}), 400
         
-        Now, combine these words: {word1}, {word2}
-        """
-    elif word1:
+        # Save the file temporarily
+        original_file_path = os.path.join('temp', audio_file.filename)
+        audio_file.save(original_file_path)
+        
+        # Convert file to WAV format if not already in WAV format
+        if not audio_file.filename.endswith('.wav'):
+            sound = AudioSegment.from_file(original_file_path)
+            wav_file_path = os.path.join('temp', os.path.splitext(audio_file.filename)[0] + '.wav')
+            sound.export(wav_file_path, format='wav')
+        else:
+            wav_file_path = original_file_path
+
+        # Run your transcription logic here
+        # Example placeholder for actual transcription processing
+        transcription_text = "This is a test transcription."  # Replace this with your actual transcription logic
+
+        # After transcribing the audio, use the transcription as a description for word generation
+        generated_word = generate_word_from_description(transcription_text)
+
+        # Return both transcription and the generated word
+        return jsonify({
+            'text': transcription_text,
+            'generated_word': generated_word
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+def generate_word_from_description(description):
+    try:
         # Generate a single word from description
         prompt = f"""
-        Generate a single, real-world existing object that fits the description: "{word1}". 
+        Generate a single, real-world existing object that fits the description: "{description}". 
         The object should be meaningful and recognizable in the real world. 
         Provide only the name of the object as the response.
         Example:
         Input: something that keeps you warm
         Output: blanket
+        Give an accurate object name instead of random names
         
-        Now, for the description: {word1}
+        Now, for the description: {description}
         """
-    else:
-        return jsonify({'error': 'Please provide either two words or a description'}), 400
 
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json"
+        }
 
-    data = {
-        "model": "llama3-8b-8192",
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.7,
-        "max_tokens": 50
-    }
+        data = {
+            "model": "llama3-8b-8192",
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.7,
+            "max_tokens": 50
+        }
 
-    response = requests.post(url, headers=headers, json=data)
+        response = requests.post(url, headers=headers, json=data)
 
-    if response.status_code == 200:
-        new_word = response.json()['choices'][0]['message']['content'].strip()
-        return jsonify({'new_word': new_word})
-    else:
-        return jsonify({'error': 'Word combination failed', 'details': response.text}), 500
+        if response.status_code == 200:
+            # Extract and clean the generated word from the response
+            generated_word = response.json().get('choices', [{}])[0].get('message', {}).get('content', '').strip()
+            return generated_word
+        else:
+            return 'Error generating word'
+
+    except Exception as e:
+        return f"Error: {str(e)}"
 
 if __name__ == '__main__':
     app.run(debug=True)
