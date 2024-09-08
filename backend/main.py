@@ -1,36 +1,32 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 import requests
 import os
 from flask_cors import CORS
-from pydub import AudioSegment  # Library for handling audio format conversion
+from pydub import AudioSegment
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+CORS(app)
 
 GROQ_API_KEY = "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"
+STABILITY_API_KEY = "your_stability_api_key"
 
-# Ensure the 'temp' directory exists for saving files
 if not os.path.exists('temp'):
     os.makedirs('temp')
 
 @app.route('/transcribe', methods=['POST'])
 def transcribe():
     try:
-        # Ensure the file is part of the request
         if 'audio' not in request.files:
             return jsonify({'error': 'No audio file provided'}), 400
 
         audio_file = request.files['audio']
 
-        # Validate that the file is an audio file
         if not audio_file.filename.endswith(('.wav', '.mp3', '.ogg')):
             return jsonify({'error': 'Unsupported audio format. Please upload a .wav, .mp3, or .ogg file.'}), 400
         
-        # Save the file temporarily
         original_file_path = os.path.join('temp', audio_file.filename)
         audio_file.save(original_file_path)
         
-        # Convert file to WAV format if not already in WAV format
         if not audio_file.filename.endswith('.wav'):
             sound = AudioSegment.from_file(original_file_path)
             wav_file_path = os.path.join('temp', os.path.splitext(audio_file.filename)[0] + '.wav')
@@ -38,25 +34,30 @@ def transcribe():
         else:
             wav_file_path = original_file_path
 
-        # Run your transcription logic here
-        # Example placeholder for actual transcription processing
-        transcription_text = "This is a test transcription."  # Replace this with your actual transcription logic
-
-        # After transcribing the audio, use the transcription as a description for word generation
+        # Replace this with actual transcription logic
+        transcription_text = perform_transcription(wav_file_path)
+        
         generated_word = generate_word_from_description(transcription_text)
 
-        # Return both transcription and the generated word
+        # Generate image from the generated word
+        image_path = generate_image_from_prompt(generated_word)
+
         return jsonify({
             'text': transcription_text,
-            'generated_word': generated_word
+            'generated_word': generated_word,
+            'image_url': image_path
         })
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+def perform_transcription(file_path):
+    # Implement your transcription logic here
+    # For example, call an external API or service to get the transcription
+    return "This is the actual transcription result"  # Placeholder for actual result
+
 def generate_word_from_description(description):
     try:
-        # Generate a single word from description
         prompt = f"""
         Generate a single, real-world existing object that fits the description: "{description}". 
         The object should be meaningful and recognizable in the real world. 
@@ -85,11 +86,39 @@ def generate_word_from_description(description):
         response = requests.post(url, headers=headers, json=data)
 
         if response.status_code == 200:
-            # Extract and clean the generated word from the response
             generated_word = response.json().get('choices', [{}])[0].get('message', {}).get('content', '').strip()
             return generated_word
         else:
             return 'Error generating word'
+
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+def generate_image_from_prompt(prompt):
+    try:
+        url = "https://api.stability.ai/v2beta/stable-image/generate/ultra"
+        headers = {
+            "authorization": f"Bearer {STABILITY_API_KEY}",
+            "accept": "image/*"
+        }
+
+        response = requests.post(
+            url,
+            headers=headers,
+            files={"none": ''},
+            data={
+                "prompt": prompt,
+                "output_format": "webp",
+            },
+        )
+
+        if response.status_code == 200:
+            image_path = "./generated_image.webp"
+            with open(image_path, 'wb') as file:
+                file.write(response.content)
+            return image_path
+        else:
+            raise Exception('Image generation failed')
 
     except Exception as e:
         return f"Error: {str(e)}"

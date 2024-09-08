@@ -6,6 +6,7 @@ function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [transcription, setTranscription] = useState('');
   const [combinedWord, setCombinedWord] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
   const [mediaRecorder, setMediaRecorder] = useState(null);
   const [audioChunks, setAudioChunks] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -69,6 +70,7 @@ function App() {
 
       setTranscription(response.data.text);
       setCombinedWord(response.data.generated_word);
+      setImageUrl(response.data.image_url); // Set the image URL
     } catch (error) {
       console.error("Error during transcription:", error);
       setErrorMessage("Error during transcription. Please try again.");
@@ -120,6 +122,13 @@ function App() {
             <div>
               <h2>Generated Word:</h2>
               <p>{combinedWord}</p>
+            </div>
+          )}
+
+          {imageUrl && (
+            <div>
+              <h2>Generated Image:</h2>
+              <img src={imageUrl} alt="Generated" style={{ maxWidth: '100%', height: 'auto' }} />
             </div>
           )}
         </div>
